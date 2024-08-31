@@ -7,7 +7,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautif
 import CameraUpload from './CameraUpload';
 import QRCodeGenerator from './QRCodeGenerator';
 import PDFGenerator from './PDFGenerator';
-import { v4 as uuidv4 } from 'uuid';
+// import { v4 as uuidv4 } from 'uuid';
 
 interface Lane {
   id: string;
