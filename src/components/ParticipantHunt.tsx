@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { db } from '../firebase';
 import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
-import QrReader from 'react-qr-reader';
+import { useZxing } from "react-zxing";
 
 interface Image {
   id: string;
@@ -20,6 +20,12 @@ const ParticipantHunt: React.FC = () => {
   const [error, setError] = useState('');
   const [showScanner, setShowScanner] = useState(false);
   const [huntStarted, setHuntStarted] = useState(false);
+
+  const { ref } = useZxing({
+    onResult(result) {
+      handleScan(result.getText());
+    },
+  });
 
   useEffect(() => {
     const fetchHuntData = async () => {
@@ -63,27 +69,20 @@ const ParticipantHunt: React.FC = () => {
     }
   }, [laneId]);
 
-  const handleScan = async (data: string | null) => {
-    if (data) {
-      if (data === images[currentImageIndex + 1]?.url) {
-        setCurrentImageIndex(currentImageIndex + 1);
-        setShowScanner(false);
-        
-        // Update the current image index in Firestore
-        if (laneId) {
-          await updateDoc(doc(db, 'lanes', laneId), {
-            currentImageIndex: currentImageIndex + 1
-          });
-        }
-      } else {
-        setError('Invalid QR code. Please try again.');
+  const handleScan = async (data: string) => {
+    if (data === images[currentImageIndex + 1]?.url) {
+      setCurrentImageIndex(currentImageIndex + 1);
+      setShowScanner(false);
+      
+      // Update the current image index in Firestore
+      if (laneId) {
+        await updateDoc(doc(db, 'lanes', laneId), {
+          currentImageIndex: currentImageIndex + 1
+        });
       }
+    } else {
+      setError('Invalid QR code. Please try again.');
     }
-  };
-
-  const handleError = (err: any) => {
-    console.error(err);
-    setError('Error scanning QR code');
   };
 
   if (loading) return <div>Loading...</div>;
@@ -100,12 +99,15 @@ const ParticipantHunt: React.FC = () => {
           <img src={images[currentImageIndex].url} alt="Current clue" className="w-full max-w-md mb-4" />
           <p className="mb-4">Find the location in this image and scan the QR code there.</p>
           {showScanner ? (
-            <QrReader
-              delay={300}
-              onError={handleError}
-              onScan={handleScan}
-              style={{ width: '100%', maxWidth: '300px' }}
-            />
+            <div>
+              <video ref={ref} style={{ width: '100%', maxWidth: '300px' }} />
+              <button
+                onClick={() => setShowScanner(false)}
+                className="bg-red-500 text-white px-4 py-2 rounded mt-2"
+              >
+                Stop Scanning
+              </button>
+            </div>
           ) : (
             <button
               onClick={() => setShowScanner(true)}
