@@ -27,6 +27,7 @@
   "dependencies": {
     "firebase": "^10.12.5",
     "lucide-react": "^0.427.0",
-    "react-router-dom": "^6.26.0"
+    "react-router-dom": "^6.26.0",
+    "react-zxing": "^2.0.2"
   }
 }
