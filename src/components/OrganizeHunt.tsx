@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { db, storage } from '../firebase';
 import { doc, getDoc, updateDoc, onSnapshot, collection } from 'firebase/firestore';
@@ -36,6 +36,7 @@ const OrganizeHunt: React.FC = () => {
   const [participants, setParticipants] = useState<{ [laneId: string]: Participant[] }>({});
   const [huntStarted, setHuntStarted] = useState(false);
   const [activeLaneIndex, setActiveLaneIndex] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const fetchHuntData = async () => {
@@ -100,6 +101,11 @@ const OrganizeHunt: React.FC = () => {
     await updateDoc(doc(db, 'hunts', huntId), {
       [`lanes.${laneIndex}.images`]: updatedLanes[laneIndex].images
     });
+
+    // Clear the file input after successful upload
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const moveImage = async (laneIndex: number, fromIndex: number, toIndex: number) => {
@@ -164,6 +170,13 @@ const OrganizeHunt: React.FC = () => {
     setHuntStarted(true);
   };
 
+  const handleTabChange = (index: number) => {
+    setActiveLaneIndex(index);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const renderControlPanel = () => (
     <div className="mt-8 bg-white p-6 rounded-lg shadow-md">
       <h2 className="text-2xl font-bold mb-4">Control Panel</h2>
@@ -223,7 +236,7 @@ const OrganizeHunt: React.FC = () => {
         {lanes.map((lane, index) => (
           <button
             key={lane.id}
-            onClick={() => setActiveLaneIndex(index)}
+            onClick={() => handleTabChange(index)}
             className={`px-4 py-2 mr-2 ${
               activeLaneIndex === index
                 ? 'bg-blue-500 text-white'
@@ -239,6 +252,7 @@ const OrganizeHunt: React.FC = () => {
       <div className="border p-4 rounded">
         <h2 className="text-xl font-semibold mb-4">Lane {activeLaneIndex + 1}</h2>
         <input
+          ref={fileInputRef}
           type="file"
           accept="image/*"
           onChange={(e) => e.target.files && handleImageUpload(activeLaneIndex, e.target.files[0])}
