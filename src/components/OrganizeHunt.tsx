@@ -3,7 +3,6 @@ import { useParams } from 'react-router-dom';
 import { db, storage } from '../firebase';
 import { doc, getDoc, updateDoc, onSnapshot, collection } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import CameraUpload from './CameraUpload';
 import QRCodeGenerator from './QRCodeGenerator';
 import PDFGenerator from './PDFGenerator';
@@ -36,6 +35,7 @@ const OrganizeHunt: React.FC = () => {
   const [invitationLinks, setInvitationLinks] = useState<string[]>([]);
   const [participants, setParticipants] = useState<{ [laneId: string]: Participant[] }>({});
   const [huntStarted, setHuntStarted] = useState(false);
+  const [activeLaneIndex, setActiveLaneIndex] = useState(0);
 
   useEffect(() => {
     const fetchHuntData = async () => {
@@ -76,31 +76,40 @@ const OrganizeHunt: React.FC = () => {
     }
   }, [huntId]);
 
-  const handleImageUpload = async (laneIndex: number, file: File) => {
+  const handleImageUpload = async (laneIndex: number, file: File, insertIndex?: number) => {
     if (!huntId) return;
 
-    // 1. Create a reference to the storage location
     const imageRef = ref(storage, `hunts/${huntId}/images/${file.name}`);
-
-    // 2. Upload the file to Firebase Storage
     await uploadBytes(imageRef, file);
-
-    // 3. Get the download URL of the uploaded file
     const imageUrl = await getDownloadURL(imageRef);
 
-    // 4. Create a new Image object with the download URL
     const newImage: Image = {
       id: `image-${Date.now()}`,
       url: imageUrl,
       label: ''
     };
 
-    // 5. Update the local state
     const updatedLanes = [...lanes];
-    updatedLanes[laneIndex].images.push(newImage);
+    if (insertIndex !== undefined) {
+      updatedLanes[laneIndex].images.splice(insertIndex + 1, 0, newImage);
+    } else {
+      updatedLanes[laneIndex].images.push(newImage);
+    }
     setLanes(updatedLanes);
 
-    // 6. Update Firestore with the new image data
+    await updateDoc(doc(db, 'hunts', huntId), {
+      [`lanes.${laneIndex}.images`]: updatedLanes[laneIndex].images
+    });
+  };
+
+  const moveImage = async (laneIndex: number, fromIndex: number, toIndex: number) => {
+    if (!huntId) return;
+
+    const updatedLanes = [...lanes];
+    const [movedImage] = updatedLanes[laneIndex].images.splice(fromIndex, 1);
+    updatedLanes[laneIndex].images.splice(toIndex, 0, movedImage);
+    setLanes(updatedLanes);
+
     await updateDoc(doc(db, 'hunts', huntId), {
       [`lanes.${laneIndex}.images`]: updatedLanes[laneIndex].images
     });
@@ -138,23 +147,6 @@ const OrganizeHunt: React.FC = () => {
 
   const handleCameraCapture = async (laneIndex: number, file: File) => {
     await handleImageUpload(laneIndex, file);
-  };
-
-  const onDragEnd = async (result: DropResult) => {
-    if (!result.destination || !huntId) return;
-
-    const { source, destination } = result;
-    const laneIndex = parseInt(source.droppableId.split('-')[1]);
-    const updatedLanes = [...lanes];
-    const [reorderedItem] = updatedLanes[laneIndex].images.splice(source.index, 1);
-    updatedLanes[laneIndex].images.splice(destination.index, 0, reorderedItem);
-
-    setLanes(updatedLanes);
-
-    // Update Firestore
-    await updateDoc(doc(db, 'hunts', huntId), {
-      [`lanes.${laneIndex}.images`]: updatedLanes[laneIndex].images
-    });
   };
 
   const copyInvitationLink = (link: string) => {
@@ -225,61 +217,92 @@ const OrganizeHunt: React.FC = () => {
         </button>
       </div>
       {showPDF && <PDFGenerator lanes={lanes} />}
-      <DragDropContext onDragEnd={onDragEnd}>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {lanes.map((lane, laneIndex) => (
-            <div key={lane.id} className="border p-4 rounded">
-              <h2 className="text-xl font-semibold mb-4">Lane {laneIndex + 1}</h2>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => e.target.files && handleImageUpload(laneIndex, e.target.files[0])}
-                className="mb-4"
-              />
-              <CameraUpload onCapture={(file) => handleCameraCapture(laneIndex, file)} />
-              <Droppable droppableId={`lane-${laneIndex}`}>
-                {(provided) => (
-                  <div {...provided.droppableProps} ref={provided.innerRef}>
-                    {lane.images.map((image, imageIndex) => (
-                      <Draggable key={image.id} draggableId={image.id} index={imageIndex}>
-                        {(provided) => (
-                          <div
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            {...provided.dragHandleProps}
-                            className="mb-4 bg-white p-2 rounded shadow"
-                          >
-                            <img src={image.url} alt={`Lane ${laneIndex + 1} Image ${imageIndex + 1}`} className="w-full mb-2" />
-                            <input
-                              type="text"
-                              value={image.label}
-                              onChange={(e) => handleLabelChange(laneIndex, imageIndex, e.target.value)}
-                              placeholder="Enter image label"
-                              className="w-full px-2 py-1 border rounded mb-2"
-                            />
-                            <button
-                              onClick={() => handleImageRemove(laneIndex, imageIndex)}
-                              className="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600"
-                            >
-                              Remove
-                            </button>
-                            {showQRCodes && (
-                              <div className="mt-2">
-                                <QRCodeGenerator url={image.url} label={image.label} />
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </Draggable>
-                    ))}
-                    {provided.placeholder}
-                  </div>
-                )}
-              </Droppable>
+
+      {/* Tabs for lanes */}
+      <div className="mb-4">
+        {lanes.map((lane, index) => (
+          <button
+            key={lane.id}
+            onClick={() => setActiveLaneIndex(index)}
+            className={`px-4 py-2 mr-2 ${
+              activeLaneIndex === index
+                ? 'bg-blue-500 text-white'
+                : 'bg-gray-200 text-gray-700'
+            }`}
+          >
+            Lane {index + 1}
+          </button>
+        ))}
+      </div>
+
+      {/* Active lane content */}
+      <div className="border p-4 rounded">
+        <h2 className="text-xl font-semibold mb-4">Lane {activeLaneIndex + 1}</h2>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) => e.target.files && handleImageUpload(activeLaneIndex, e.target.files[0])}
+          className="mb-4"
+        />
+        <CameraUpload onCapture={(file) => handleCameraCapture(activeLaneIndex, file)} />
+        
+        {lanes[activeLaneIndex].images.map((image, imageIndex) => (
+          <div key={image.id} className="mb-4 bg-white p-2 rounded shadow">
+            <img src={image.url} alt={`Lane ${activeLaneIndex + 1} Image ${imageIndex + 1}`} className="w-full mb-2" />
+            <input
+              type="text"
+              value={image.label}
+              onChange={(e) => handleLabelChange(activeLaneIndex, imageIndex, e.target.value)}
+              placeholder="Enter image label"
+              className="w-full px-2 py-1 border rounded mb-2"
+            />
+            <div className="flex justify-between">
+              <button
+                onClick={() => handleImageRemove(activeLaneIndex, imageIndex)}
+                className="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600"
+              >
+                Remove
+              </button>
+              <div>
+                <button
+                  onClick={() => moveImage(activeLaneIndex, imageIndex, imageIndex - 1)}
+                  disabled={imageIndex === 0}
+                  className="bg-gray-500 text-white px-2 py-1 rounded hover:bg-gray-600 disabled:opacity-50 mr-2"
+                >
+                  ↑
+                </button>
+                <button
+                  onClick={() => moveImage(activeLaneIndex, imageIndex, imageIndex + 1)}
+                  disabled={imageIndex === lanes[activeLaneIndex].images.length - 1}
+                  className="bg-gray-500 text-white px-2 py-1 rounded hover:bg-gray-600 disabled:opacity-50"
+                >
+                  ↓
+                </button>
+              </div>
             </div>
-          ))}
-        </div>
-      </DragDropContext>
+            <button
+              onClick={() => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'image/*';
+                input.onchange = (e) => {
+                  const file = (e.target as HTMLInputElement).files?.[0];
+                  if (file) handleImageUpload(activeLaneIndex, file, imageIndex);
+                };
+                input.click();
+              }}
+              className="bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600 mt-2"
+            >
+              Add Image Below
+            </button>
+            {showQRCodes && (
+              <div className="mt-2">
+                <QRCodeGenerator url={image.url} label={image.label} />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
 
       <h2 className="text-2xl font-bold mt-8 mb-4">Invitation Links</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
