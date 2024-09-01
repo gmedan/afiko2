@@ -1,5 +1,5 @@
 import React from 'react';
-import { Document, Page, Text, View, StyleSheet, PDFViewer } from '@react-pdf/renderer';
+import { Document, Page, Text, View, StyleSheet, PDFViewer, Image as PDFImage } from '@react-pdf/renderer';
 import QRCode from 'qrcode';
 
 interface PDFGeneratorProps {
@@ -40,15 +40,22 @@ const styles = StyleSheet.create({
 });
 
 const PDFGenerator: React.FC<PDFGeneratorProps> = ({ lanes }) => {
-  const generateQRCode = async (url: string) => {
-    try {
-      const qrCodeDataURL = await QRCode.toDataURL(url);
-      return qrCodeDataURL;
-    } catch (error) {
-      console.error('Error generating QR code:', error);
-      return '';
-    }
-  };
+  const [qrCodes, setQrCodes] = React.useState<{ [key: string]: string }>({});
+
+  React.useEffect(() => {
+    const generateQRCodes = async () => {
+      const codes: { [key: string]: string } = {};
+      for (const lane of lanes) {
+        for (const image of lane.images) {
+          codes[image.url] = await QRCode.toDataURL(image.url);
+        }
+        codes[`victory/${lane.id}`] = await QRCode.toDataURL(`victory/${lane.id}`);
+      }
+      setQrCodes(codes);
+    };
+
+    generateQRCodes();
+  }, [lanes]);
 
   return (
     <PDFViewer width="100%" height={600}>
@@ -64,12 +71,16 @@ const PDFGenerator: React.FC<PDFGeneratorProps> = ({ lanes }) => {
                       ? `Lane ${laneIndex + 1} Start`
                       : lane.images[imageIndex - 1].label}
                   </Text>
-                  <PDFQRCode url={image.url} />
+                  {qrCodes[image.url] && (
+                    <PDFImage src={qrCodes[image.url]} style={styles.qrCode} />
+                  )}
                 </View>
               ))}
               <View>
                 <Text style={styles.label}>{lane.images[lane.images.length - 1].label}</Text>
-                <PDFQRCode url={`victory/${lane.id}`} />
+                {qrCodes[`victory/${lane.id}`] && (
+                  <PDFImage src={qrCodes[`victory/${lane.id}`]} style={styles.qrCode} />
+                )}
                 <Text style={styles.label}>Victory!</Text>
               </View>
             </View>
@@ -78,16 +89,6 @@ const PDFGenerator: React.FC<PDFGeneratorProps> = ({ lanes }) => {
       </Document>
     </PDFViewer>
   );
-};
-
-const PDFQRCode: React.FC<{ url: string }> = ({ url }) => {
-  const [qrCodeDataURL, setQRCodeDataURL] = React.useState('');
-
-  React.useEffect(() => {
-    generateQRCode(url).then(setQRCodeDataURL);
-  }, [url]);
-
-  return <Image style={styles.qrCode} src={qrCodeDataURL} />;
 };
 
 export default PDFGenerator;
