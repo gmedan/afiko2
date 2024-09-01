@@ -6,7 +6,7 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage
 import CameraUpload from './CameraUpload';
 import QRCodeGenerator from './QRCodeGenerator';
 import PDFGenerator from './PDFGenerator';
-// import { v4 as uuidv4 } from 'uuid';
+import { debounce } from 'lodash';
 
 interface Lane {
   id: string;
@@ -151,9 +151,9 @@ const OrganizeHunt: React.FC = () => {
     });
   };
 
-  const handleCameraCapture = async (laneIndex: number, file: File) => {
+  const handleCameraCapture = debounce(async (laneIndex: number, file: File) => {
     await handleImageUpload(laneIndex, file);
-  };
+  }, 300);
 
   const copyInvitationLink = (link: string) => {
     navigator.clipboard.writeText(link);

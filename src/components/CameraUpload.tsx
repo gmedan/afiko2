@@ -9,16 +9,24 @@ const CameraUpload: React.FC<CameraUploadProps> = ({ onCapture }) => {
   const [isCapturing, setIsCapturing] = useState(false);
   const [countdown, setCountdown] = useState(3);
   const webcamRef = useRef<Webcam>(null);
+  const captureTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const startCapture = (seconds: number) => {
     setIsCapturing(true);
     setCountdown(seconds);
 
+    if (captureTimeoutRef.current) {
+      clearTimeout(captureTimeoutRef.current);
+    }
+
+    captureTimeoutRef.current = setTimeout(() => {
+      captureImage();
+    }, seconds * 1000);
+
     const timer = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          captureImage();
           return 0;
         }
         return prev - 1;
