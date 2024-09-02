@@ -26,8 +26,10 @@
   },
   "dependencies": {
     "@react-pdf/renderer": "^3.4.4",
+    "@types/lodash": "^4.17.7",
     "@types/react-webcam": "^3.0.0",
     "firebase": "^10.12.5",
+    "lodash": "^4.17.21",
     "lucide-react": "^0.427.0",
     "qrcode.react": "^4.0.1",
     "react-beautiful-dnd": "^13.1.1",
