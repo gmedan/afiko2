@@ -208,6 +208,38 @@ const OrganizeHunt: React.FC = () => {
     </div>
   );
 
+  const generatePDF = () => {
+    const pdfContent = ReactDOMServer.renderToString(<PDFGenerator lanes={lanes} />);
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>QR Codes for ${huntName}</title>
+            <style>
+              body { font-family: Arial, sans-serif; }
+              table { border-collapse: collapse; width: 100%; }
+              th, td { border: 1px solid black; padding: 8px; text-align: center; }
+              .qr-code-container { display: flex; flex-direction: column; align-items: center; }
+              @media print {
+                body { -webkit-print-color-adjust: exact; }
+                table { page-break-inside: auto; }
+                tr { page-break-inside: avoid; page-break-after: auto; }
+              }
+            </style>
+          </head>
+          <body>
+            ${pdfContent}
+            <script>
+              window.onload = function() { window.print(); }
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }
+  };
+
   if (loading) {
     return <div>Loading...</div>;
   }
@@ -223,13 +255,12 @@ const OrganizeHunt: React.FC = () => {
           {showQRCodes ? 'Hide QR Codes' : 'Show QR Codes'}
         </button>
         <button
-          onClick={() => setShowPDF(!showPDF)}
+          onClick={generatePDF}
           className="bg-green-500 text-white px-4 py-2 rounded"
         >
-          {showPDF ? 'Hide PDF' : 'Generate PDF'}
+          Generate PDF
         </button>
       </div>
-      {showPDF && <PDFGenerator lanes={lanes} />}
 
       {/* Tabs for lanes */}
       <div className="mb-4">
